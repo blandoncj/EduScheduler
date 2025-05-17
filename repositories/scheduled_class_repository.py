@@ -1,0 +1,284 @@
+
+import json
+import os
+import uuid
+from datetime import datetime
+
+
+class ScheduledClassRepository:
+    """
+    Manages scheduled class data persistence in a JSON file.
+    Handles loading, saving, adding, updating, and deleting scheduled classes.
+    """
+
+    def __init__(self, filepath='./storage/scheduled_classes.json'):
+        """
+        Initializes the repository.
+
+        Args:
+            filepath (str): The path to the JSON file where scheduled class data is stored.
+        """
+        self.filepath = filepath
+        # Ensure the storage directory exists
+        os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
+        self.scheduled_classes_data = self._load_data()
+
+    def _load_data(self):
+        """
+        Loads scheduled class data from the JSON file.
+        If the file doesn't exist or is empty, it initializes with an empty list
+        or optional default data.
+
+        Returns:
+            list: A list of scheduled class dictionaries.
+        """
+        if not os.path.exists(self.filepath) or os.path.getsize(self.filepath) == 0:
+            # No default data for scheduled classes by default, as they are highly dynamic.
+            # If you need default/example data for a first run, you can add it here:
+            # default_data = [
+            #     {
+            #         "id": str(uuid.uuid4()).upper(), "date": "2025-08-01", "start_time": "07:00",
+            #         "end_time": "09:00", "subject_id": "ID_MATERIA_ALGEBRA",
+            #         "teacher_id": "12345", "classroom_id": "101-A"
+            #     }
+            # ]
+            # self._save_data(default_data)
+            # return default_data
+            return []
+        try:
+            with open(self.filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading scheduled class data from {
+                  self.filepath}: {e}")
+            return []
+
+    def _save_data(self, data=None):
+        """
+        Saves the scheduled class data to the JSON file.
+
+        Args:
+            data (list, optional): The data to save. If None, saves self.scheduled_classes_data.
+        """
+        try:
+            with open(self.filepath, 'w', encoding='utf-8') as f:
+                json.dump(data if data is not None else self.scheduled_classes_data,
+                          f, indent=4, ensure_ascii=False)
+        except IOError as e:
+            print(f"Error saving scheduled class data to {self.filepath}: {e}")
+
+    def get_all_scheduled_classes(self):
+        """
+        Retrieves all scheduled classes.
+
+        Returns:
+            list: A list of lists, where each inner list represents a scheduled class's
+                  attributes [id, date, start_time, end_time, subject_id, 
+                               teacher_id, classroom_id].
+                  The order is important for how the UI consumes it.
+        """
+        return [
+            [
+                sc.get("id"),
+                sc.get("date"),
+                sc.get("start_time"),
+                sc.get("end_time"),
+                sc.get("subject_id"),
+                sc.get("teacher_id"),
+                sc.get("classroom_id")
+            ] for sc in self.scheduled_classes_data
+        ]
+
+    def get_scheduled_class_by_id(self, class_id):
+        """
+        Finds a scheduled class by its ID.
+
+        Args:
+            class_id (str): The ID of the scheduled class.
+
+        Returns:
+            list: A list of the class's attributes if found, otherwise None.
+        """
+        class_id_str = str(class_id)
+        for sc in self.scheduled_classes_data:
+            if str(sc.get("id")) == class_id_str:
+                return [
+                    sc.get("id"),
+                    sc.get("date"),
+                    sc.get("start_time"),
+                    sc.get("end_time"),
+                    sc.get("subject_id"),
+                    sc.get("teacher_id"),
+                    sc.get("classroom_id")
+                ]
+        return None
+
+    def scheduled_class_id_exists(self, class_id):
+        """
+        Checks if a scheduled class with the given ID already exists.
+        Mainly for internal consistency, as UUIDs should be unique.
+
+        Args:
+            class_id (str): The class ID to check.
+
+        Returns:
+            bool: True if the class ID exists, False otherwise.
+        """
+        class_id_str = str(class_id)
+        return any(str(sc.get("id")) == class_id_str for sc in self.scheduled_classes_data)
+
+    def add_scheduled_class(self, class_details):
+        """
+        Adds a new scheduled class.
+
+        Args:
+            class_details (list): Scheduled class details in the format:
+                                    [id, date_str, start_time_str, end_time_str, 
+                                     subject_id, teacher_id, classroom_id].
+                                    The ID should be pre-generated by the UI (UUID).
+        Returns:
+            bool: True if added successfully, False if a class with the same ID already exists
+                  (should be rare with UUIDs).
+        """
+        class_id = str(class_details[0])
+        if self.scheduled_class_id_exists(class_id):
+            print(f"Error: Scheduled class with ID '{
+                  class_id}' already exists. Cannot add.")
+            return False
+
+        new_scheduled_class = {
+            "id": class_id,
+            "date": str(class_details[1]),  # YYYY-MM-DD
+            "start_time": str(class_details[2]),  # HH:MM
+            "end_time": str(class_details[3]),  # HH:MM
+            "subject_id": str(class_details[4]) if class_details[4] else None,
+            "teacher_id": str(class_details[5]) if class_details[5] else None,
+            "classroom_id": str(class_details[6]) if class_details[6] else None
+        }
+        self.scheduled_classes_data.append(new_scheduled_class)
+        self._save_data()
+        return True
+
+    def update_scheduled_class(self, original_class_id, updated_details):
+        """
+        Updates an existing scheduled class. The class ID cannot be changed.
+
+        Args:
+            original_class_id (str): The original ID of the class to update.
+            updated_details (list): Updated details [id, date_str, start_time_str, end_time_str, 
+                                     subject_id, teacher_id, classroom_id].
+                                    The 'id' in updated_details should be the same as original_class_id.
+        Returns:
+            bool: True if updated successfully. False if not found.
+        """
+        original_id_str = str(original_class_id)
+        new_id_str = str(updated_details[0])
+
+        if new_id_str != original_id_str:
+            print(f"Error: Scheduled Class ID cannot be changed. Original: {
+                  original_id_str}, Attempted: {new_id_str}")
+            return False  # ID should not be changed
+
+        for i, sc in enumerate(self.scheduled_classes_data):
+            if str(sc.get("id")) == original_id_str:
+                self.scheduled_classes_data[i] = {
+                    "id": new_id_str,
+                    "date": str(updated_details[1]),
+                    "start_time": str(updated_details[2]),
+                    "end_time": str(updated_details[3]),
+                    "subject_id": str(updated_details[4]) if updated_details[4] else None,
+                    "teacher_id": str(updated_details[5]) if updated_details[5] else None,
+                    "classroom_id": str(updated_details[6]) if updated_details[6] else None
+                }
+                self._save_data()
+                return True
+        return False  # Scheduled class with original_class_id not found
+
+    def delete_scheduled_class(self, class_id):
+        """
+        Deletes a scheduled class by its ID.
+
+        Args:
+            class_id (str): The ID of the class to delete.
+
+        Returns:
+            bool: True if deleted successfully, False otherwise.
+        """
+        class_id_str = str(class_id)
+        original_len = len(self.scheduled_classes_data)
+        self.scheduled_classes_data = [
+            sc for sc in self.scheduled_classes_data if str(sc.get("id")) != class_id_str]
+
+        if len(self.scheduled_classes_data) < original_len:
+            self._save_data()
+            return True
+        return False
+
+    # --- Métodos de validación de negocio (Opcional - podrían estar en la UI o una capa de servicio) ---
+    # Estos métodos requerirían acceso a otros repositorios o listas de datos
+    # para verificar conflictos. Por ahora, se asume que esta lógica está en ClasesFrame.
+
+    def check_teacher_availability_conflict(self, teacher_id, date_str, start_time_str, end_time_str, excluding_class_id=None):
+        """
+        Checks if a teacher has a scheduling conflict for the given date/time.
+        (Esta es una versión simplificada; la lógica real de disponibilidad del profesor es más compleja
+         y se maneja en la UI de Profesores actualmente).
+        Aquí, solo verificamos si ya tiene otra CLASE programada.
+        """
+        try:
+            new_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            new_start = datetime.strptime(start_time_str, "%H:%M").time()
+            new_end = datetime.strptime(end_time_str, "%H:%M").time()
+        except ValueError:
+            return True  # Formato inválido, considera un conflicto
+
+        for sc in self.scheduled_classes_data:
+            if excluding_class_id and str(sc.get("id")) == str(excluding_class_id):
+                continue  # No comparar una clase consigo misma durante una actualización
+
+            if str(sc.get("teacher_id")) == str(teacher_id):
+                try:
+                    existing_date = datetime.strptime(
+                        sc.get("date"), "%Y-%m-%d").date()
+                    existing_start = datetime.strptime(
+                        sc.get("start_time"), "%H:%M").time()
+                    existing_end = datetime.strptime(
+                        sc.get("end_time"), "%H:%M").time()
+
+                    if new_date == existing_date and \
+                       max(new_start, existing_start) < min(new_end, existing_end):  # Hay solapamiento
+                        return True  # Conflicto encontrado
+                except (ValueError, TypeError):
+                    continue  # Saltar si hay datos mal formateados en el JSON
+        return False  # No hay conflicto
+
+    def check_classroom_availability_conflict(self, classroom_id, date_str, start_time_str, end_time_str, excluding_class_id=None):
+        """
+        Checks if a classroom has a scheduling conflict for the given date/time.
+        """
+        try:
+            new_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            new_start = datetime.strptime(start_time_str, "%H:%M").time()
+            new_end = datetime.strptime(end_time_str, "%H:%M").time()
+        except ValueError:
+            return True  # Formato inválido, considera un conflicto
+
+        for sc in self.scheduled_classes_data:
+            if excluding_class_id and str(sc.get("id")) == str(excluding_class_id):
+                continue
+
+            if str(sc.get("classroom_id")) == str(classroom_id):
+                try:
+                    existing_date = datetime.strptime(
+                        sc.get("date"), "%Y-%m-%d").date()
+                    existing_start = datetime.strptime(
+                        sc.get("start_time"), "%H:%M").time()
+                    existing_end = datetime.strptime(
+                        sc.get("end_time"), "%H:%M").time()
+
+                    if new_date == existing_date and \
+                       max(new_start, existing_start) < min(new_end, existing_end):  # Hay solapamiento
+                        return True  # Conflicto encontrado
+                except (ValueError, TypeError):
+                    continue
+        return False  # No hay conflicto
