@@ -217,6 +217,28 @@ class ScheduledClassRepository:
     # --- Métodos de validación de negocio (Opcional - podrían estar en la UI o una capa de servicio) ---
     # Estos métodos requerirían acceso a otros repositorios o listas de datos
     # para verificar conflictos. Por ahora, se asume que esta lógica está en ClasesFrame.
+    
+    def get_scheduled_classes_by_teacher_id(self, teacher_id):
+        """
+        Retrieves all scheduled classes for a specific teacher.
+
+        Args:
+            teacher_id (str): The ID of the teacher.
+
+        Returns:
+            list: A list of dictionaries, where each dictionary represents a scheduled class
+                  for that teacher. Returns an empty list if no classes are found or
+                  teacher_id is None.
+        """
+        if not teacher_id:
+            return []
+        
+        teacher_id_str = str(teacher_id)
+        teacher_classes = []
+        for sc_dict in self.scheduled_classes_data: # Iterar sobre la lista de diccionarios directamente
+            if str(sc_dict.get("teacher_id")) == teacher_id_str:
+                teacher_classes.append(sc_dict.copy()) # Añadir una copia del diccionario
+        return teacher_classes
 
     def check_teacher_availability_conflict(self, teacher_id, date_str, start_time_str, end_time_str, excluding_class_id=None):
         """
